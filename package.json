@@ -1,0 +1,16 @@
+{
+  "name": "bedrock-1.2.13.5-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servidor experimental para Minecraft Bedrock 1.2.13.5",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -14,14 +14,17 @@ const RAKNET_MAGIC = Buffer.from([
 
 const SERVER_GUID = 1234567890123456n;
 
+const sessions = new Map();
+
 function createPong() {
-    const motd =
-        "MCPE;Bedrock Survival;" +
-        "220;1.2.13.5;0;20;";
+    const motd = Buffer.from(
+        "MCPE;Bedrock Survival;220;1.2.13.5;0;20;",
+        "utf8"
+    );
 
-    const motdBuffer = Buffer.from(motd, "utf8");
-
-    const response = Buffer.alloc(35 + motdBuffer.length);
+    const response = Buffer.alloc(
+        35 + motd.length
+    );
 
     response.writeUInt8(0x1c, 0);
 
@@ -35,14 +38,17 @@ function createPong() {
         9
     );
 
-    RAKNET_MAGIC.copy(response, 17);
+    RAKNET_MAGIC.copy(
+        response,
+        17
+    );
 
     response.writeUInt16BE(
-        motdBuffer.length,
+        motd.length,
         33
     );
 
-    motdBuffer.copy(
+    motd.copy(
         response,
         35
     );
@@ -63,13 +69,80 @@ function createOpenConnectionReply1() {
     response.writeUInt8(0, 17);
 
     response.writeUInt16BE(
-        0,
+        1492,
         18
     );
 
     response.writeBigInt64BE(
         SERVER_GUID,
         20
+    );
+
+    return response;
+}
+
+function createIPv4Address(address, port) {
+    const parts = address
+        .split(".")
+        .map(Number);
+
+    const buffer = Buffer.alloc(7);
+
+    buffer.writeUInt8(4, 0);
+
+    for (let i = 0; i < 4; i++) {
+        buffer.writeUInt8(
+            255 - (parts[i] || 0),
+            i + 1
+        );
+    }
+
+    buffer.writeUInt16BE(
+        port,
+        5
+    );
+
+    return buffer;
+}
+
+function createOpenConnectionReply2(port) {
+    const address = createIPv4Address(
+        "127.0.0.1",
+        port
+    );
+
+    const response = Buffer.alloc(
+        35
+    );
+
+    response.writeUInt8(
+        0x08,
+        0
+    );
+
+    RAKNET_MAGIC.copy(
+        response,
+        1
+    );
+
+    response.writeBigInt64BE(
+        SERVER_GUID,
+        17
+    );
+
+    address.copy(
+        response,
+        25
+    );
+
+    response.writeUInt16BE(
+        1492,
+        32
+    );
+
+    response.writeUInt8(
+        0,
+        34
     );
 
     return response;
@@ -99,15 +172,7 @@ server.on("message", (packet, remote) => {
         server.send(
             response,
             remote.port,
-            remote.address,
-            error => {
-                if (error) {
-                    console.error(
-                        "[SEND ERROR]",
-                        error
-                    );
-                }
-            }
+            remote.address
         );
 
         console.log(
@@ -124,15 +189,7 @@ server.on("message", (packet, remote) => {
         server.send(
             response,
             remote.port,
-            remote.address,
-            error => {
-                if (error) {
-                    console.error(
-                        "[SEND ERROR]",
-                        error
-                    );
-                }
-            }
+            remote.address
         );
 
         console.log(
@@ -141,10 +198,69 @@ server.on("message", (packet, remote) => {
 
         return;
     }
+
+    if (id === 0x07) {
+        const response =
+            createOpenConnectionReply2(
+                remote.port
+            );
+
+        server.send(
+            response,
+            remote.port,
+            remote.address
+        );
+
+        const key =
+            remote.address +
+            ":" +
+            remote.port;
+
+        sessions.set(
+            key,
+            {
+                address: remote.address,
+                port: remote.port,
+                connectedAt: Date.now()
+            }
+        );
+
+        console.log(
+            "[RAKNET] Sessão criada:",
+            key
+        );
+
+        return;
+    }
+
+    if (
+        id >= 0x80 &&
+        id <= 0x8f
+    ) {
+        const key =
+            remote.address +
+            ":" +
+            remote.port;
+
+        if (!sessions.has(key)) {
+            console.log(
+                "[RAKNET] Pacote recebido sem sessão"
+            );
+
+            return;
+        }
+
+        console.log(
+            "[RAKNET] Pacote de sessão recebido"
+        );
+
+        return;
+    }
 });
 
 server.on("listening", () => {
-    const address = server.address();
+    const address =
+        server.address();
 
     console.log("");
     console.log(
@@ -166,10 +282,15 @@ server.on("listening", () => {
         "RakNet: UDP"
     );
     console.log(
-        "Host: " + address.address
+        "Host: " +
+        address.address
     );
     console.log(
-        "Port: " + address.port
+        "Port: " +
+        address.port
+    );
+    console.log(
+        "Sessions: 0"
     );
     console.log(
         "Status: ONLINE"
